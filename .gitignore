@@ -221,3 +221,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data and local artifacts
+data/raw/
+data/processed/
+.venv/
+*.joblib
+.ipynb_checkpoints/
