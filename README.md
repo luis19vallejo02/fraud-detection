@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore how fraud appears in a highly imbalanced set of card transactions. The project currently covers environment setup, data validation and exploratory data analysis (EDA).
+Explore how fraud appears in a highly imbalanced set of card transactions. The project currently covers environment setup, data validation, exploratory data analysis (EDA), and chronological splitting and preprocessing.
 
 ## Step 0 · Set up the environment
 
@@ -29,7 +29,7 @@ Worldline and the Machine Learning Group at Université Libre de Bruxelles (ULB)
 | Original CSV | 284,807 | 492 | 0.1727% |
 | After deduplication | 283,726 | 473 | 0.1667% |
 
-The initial inspection found zero missing values and 1,081 exact duplicate rows. The notebook keeps the first occurrence of each duplicate in memory and preserves the original CSV. Removing duplicates before the future temporal split prevents identical rows from appearing in multiple sets.
+The initial inspection found zero missing values and 1,081 exact duplicate rows. The notebook keeps the first occurrence of each duplicate in memory and preserves the original CSV. Step 3 applies the same deduplication before the temporal split so identical rows cannot appear in multiple sets.
 
 Kaggle lists the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/) for the database and the [Database Contents License (DbCL)](https://opendatacommons.org/licenses/dbcl/1-0/) for its contents. The repository code is under the [MIT license](LICENSE).
 
@@ -45,3 +45,19 @@ From the repository root with `.venv` active, start JupyterLab with `python -m j
 | [Transaction amount by class](reports/figures/02_amount_by_class.png) | The fraud median was 9.82 versus 22.00 for legitimate transactions. Fraud had a higher mean (123.87 versus 88.41). The chart uses `log(1 + Amount)` to show the skewed distributions. |
 | [Fraud rate by relative hour](reports/figures/03_fraud_by_hour.png) | Relative hour 2 had the highest observed rate, 1.45% (48 of 3,308 transactions). Hours are measured from the first transaction and grouped modulo 24. The roughly two-day window limits conclusions about weekly seasonality. |
 | [Features ranked by absolute correlation](reports/figures/04_top_features.png) | `V17`, `V14`, `V12` and `V10` had the largest absolute Pearson correlations with the fraud label. The figure shows the six highest-ranked features. |
+
+## Step 3 · Split chronologically and preprocess
+
+With the environment from Step 0 and the CSV from Step 1, open [notebooks/02_baseline.ipynb](notebooks/02_baseline.ipynb) in JupyterLab and run all cells. [src/data.py](src/data.py) loads the same 283,726 deduplicated rows used in Step 2 and sorts them by `Time`. The split uses the earliest approximately 70% of rows for training, the next 15% for tuning and threshold selection, and the last 15% for final evaluation.
+
+The nominal cuts at 70% and 85% fall inside groups of transactions with the same `Time`. Each cut moves to the start of its group, so every transaction at a boundary second goes into the later set. The notebook verifies strict time separation and at least one fraud case in each set.
+
+| Set | Transactions | Fraud cases | Fraud rate | `Time` range (seconds) |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 198,607 | 366 | 0.1843% | 0–132,905 |
+| Validation | 42,558 | 55 | 0.1292% | 132,906–151,319 |
+| Test | 42,561 | 52 | 0.1222% | 151,320–172,792 |
+
+[src/features.py](src/features.py) removes `Time` from model inputs, keeps all 28 PCA components, and applies `log1p` followed by `RobustScaler` to `Amount`. This reuses the amount transformation explored in Step 2. The scaler learns the median and interquartile range from training alone and uses those same values for validation and test. `Class` is kept separately as the label. The notebook verifies these transformations and leaves the data ready for the Step 4 baseline.
+
+With 52 fraud cases in test, detecting one additional case changes test recall by about 1.9 percentage points. The final recall estimate is therefore sensitive to a small number of cases.
