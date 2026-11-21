@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore how fraud appears in a highly imbalanced set of card transactions. The project currently covers environment setup, data validation, exploratory data analysis (EDA), and chronological splitting and preprocessing.
+Explore fraud in a highly imbalanced set of card transactions. The workflow covers environment setup, data validation, exploratory data analysis (EDA), chronological preprocessing, and a balanced logistic regression baseline.
 
 ## Step 0 · Set up the environment
 
@@ -48,7 +48,7 @@ From the repository root with `.venv` active, start JupyterLab with `python -m j
 
 ## Step 3 · Split chronologically and preprocess
 
-With the environment from Step 0 and the CSV from Step 1, open [notebooks/02_baseline.ipynb](notebooks/02_baseline.ipynb) in JupyterLab and run all cells. [src/data.py](src/data.py) loads the same 283,726 deduplicated rows used in Step 2 and sorts them by `Time`. The split uses the earliest approximately 70% of rows for training, the next 15% for tuning and threshold selection, and the last 15% for final evaluation.
+With the environment from Step 0 and the CSV from Step 1, open [notebooks/02_baseline.ipynb](notebooks/02_baseline.ipynb) in JupyterLab and run the cells in order. [src/data.py](src/data.py) loads the same 283,726 deduplicated rows used in Step 2 and sorts them by `Time`. The split uses the earliest approximately 70% of rows for training, the next 15% for tuning and threshold selection, and the last 15% for final evaluation.
 
 The nominal cuts at 70% and 85% fall inside groups of transactions with the same `Time`. Each cut moves to the start of its group, so every transaction at a boundary second goes into the later set. The notebook verifies strict time separation and at least one fraud case in each set.
 
@@ -58,6 +58,19 @@ The nominal cuts at 70% and 85% fall inside groups of transactions with the same
 | Validation | 42,558 | 55 | 0.1292% | 132,906–151,319 |
 | Test | 42,561 | 52 | 0.1222% | 151,320–172,792 |
 
-[src/features.py](src/features.py) removes `Time` from model inputs, keeps all 28 PCA components, and applies `log1p` followed by `RobustScaler` to `Amount`. This reuses the amount transformation explored in Step 2. The scaler learns the median and interquartile range from training alone and uses those same values for validation and test. `Class` is kept separately as the label. The notebook verifies these transformations and leaves the data ready for the Step 4 baseline.
+[src/features.py](src/features.py) removes `Time` from model inputs, keeps all 28 PCA components, and applies `log1p` followed by `RobustScaler` to `Amount`. This reuses the amount transformation explored in Step 2. The scaler learns the median and interquartile range from training alone and uses those same values for validation and test. `Class` is kept separately as the label. The notebook verifies these transformations before fitting the baseline.
 
 With 52 fraud cases in test, detecting one additional case changes test recall by about 1.9 percentage points. The final recall estimate is therefore sensitive to a small number of cases.
+
+## Step 4 · Fit and evaluate the baseline
+
+Run the remaining cells of [notebooks/02_baseline.ipynb](notebooks/02_baseline.ipynb). The notebook fits logistic regression with `class_weight="balanced"`, `max_iter=2000`, and `random_state=42` on the preprocessed training set. It passes the fraud scores on validation and test to the reusable functions in [src/evaluate.py](src/evaluate.py).
+
+| Set | PR-AUC (average precision) | ROC-AUC | Recall at ≥80% precision | Recall at ≥50% precision | PR-AUC with constant scores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Validation | 0.812824 | 0.980591 | 74.55% | 85.45% | 0.001292 |
+| Test | 0.689759 | 0.976271 | 69.23% | 75.00% | 0.001222 |
+
+PR-AUC is the primary ranking metric. The reference with constant scores equals each set's fraud prevalence. On test, the majority-class classifier achieves 99.8778% accuracy and detects zero of 52 frauds.
+
+Recall at fixed precision is computed over the score cutoffs available in each set. For later model comparisons, use the same temporal splits and compare validation PR-AUC. Choose an operating threshold on validation and report its performance on test with that threshold held fixed.
