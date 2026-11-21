@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, and final evaluation at a threshold chosen by business cost.
+Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, evaluation at a threshold chosen by business cost, and SHAP explanations.
 
 ## Step 0 · Set up the environment
 
@@ -127,3 +127,22 @@ The three fees selected the same cutoff, so the alert decisions stayed fixed as 
 The dataset spans about two days, test contains 52 frauds, and the PCA components are anonymized. The simulated cost depends on the fee and the assumed fraud loss. The bootstrap resamples individual transactions from test using fixed model scores. Model selection and threshold selection used validation. Step 4 reported baseline metrics on the same test split.
 
 Run `python -m pytest -q` to check the cost calculation, tied scores and the policies of alerting on every transaction or on none.
+
+## Step 7 · Explain the selected XGBoost model with SHAP
+
+Continue through the SHAP section of [notebooks/04_evaluation_shap.ipynb](notebooks/04_evaluation_shap.ipynb). It reuses the Step 5 model and preprocessor and the Step 6 threshold. The sample contains all 52 test frauds and 2,000 randomly selected legitimate transactions (seed 42). Fraud is overrepresented in this sample, so the global ranking describes the sampled transactions.
+
+TreeSHAP uses the 919 boosting rounds selected by early stopping. The baseline plus the feature contributions reconstructs the raw model margin in log-odds. Applying the logistic function recovered the scores used in Step 6 with a maximum absolute error of `2.51e-07` in the sample. The charts use SHAP 0.54.1. In the summary plot, red and blue indicate high and low feature values. Contributions to the right raise the fraud score and contributions to the left lower it.
+
+`V4`, `V14`, and `V12` had the largest mean absolute contributions. Their median contributions raised the fraud score among fraudulent transactions and lowered it among legitimate transactions. `V14` showed the largest gap between the class medians of these three components. SHAP and XGBoost gain agreed on the top five features as a set, with a Spearman rank correlation of 0.652 across all 29 features. SHAP ranked `V4` first and gain ranked `V14` first. SHAP measures contributions to predictions in this sample, while gain measures average improvement to the training objective from splits on a feature. Features with more candidate splits can receive higher gain.
+
+The notebook explains the largest fraud by original amount in each test outcome at the fixed cutoff of **0.574391**.
+
+| Test fraud | Amount (USD) | Score | Largest signed contributions (log-odds) |
+| --- | ---: | ---: | --- |
+| [Detected](reports/figures/10_shap_waterfall_fraud.png) | 1,504.93 | 0.998774 | `V14` +2.762, `V10` +1.468, `V4` +0.944 |
+| [Missed](reports/figures/11_shap_waterfall_missed_fraud.png) | 1,096.99 | 0.001837 | `V14` −1.891, `V12` −1.624, `V4` −0.948 |
+
+[SHAP summary plot](reports/figures/08_shap_summary.png) · [Mean absolute SHAP contributions](reports/figures/09_shap_bar.png)
+
+`V1` through `V28` are anonymized PCA components with unknown business meanings. SHAP identifies which components drive each model score and in which direction. Business variables such as merchant country, card type, or recent transaction frequency would give analysts more context for interpreting the contributions.
