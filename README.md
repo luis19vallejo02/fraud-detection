@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore fraud in a highly imbalanced set of card transactions. The workflow covers environment setup, data validation, exploratory data analysis (EDA), chronological preprocessing, and a balanced logistic regression baseline.
+Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, and model selection against a balanced logistic regression baseline.
 
 ## Step 0 · Set up the environment
 
@@ -74,3 +74,31 @@ Run the remaining cells of [notebooks/02_baseline.ipynb](notebooks/02_baseline.i
 PR-AUC is the primary ranking metric. The reference with constant scores equals each set's fraud prevalence. On test, the majority-class classifier achieves 99.8778% accuracy and detects zero of 52 frauds.
 
 Recall at fixed precision is computed over the score cutoffs available in each set. For later model comparisons, use the same temporal splits and compare validation PR-AUC. Choose an operating threshold on validation and report its performance on test with that threshold held fixed.
+
+## Step 5 · Compare and select fraud models
+
+Run all cells in [notebooks/03_models.ipynb](notebooks/03_models.ipynb) with the project's `.venv` active and the CSV in `data/raw/`. The notebook reuses the Step 3 chronological split and training-fitted preprocessor. It compares all candidates on the same 42,558 validation transactions, including 55 frauds. The selected model's held-out evaluation and operating threshold are part of Step 6.
+
+| Model | Validation PR-AUC (average precision) | ROC-AUC | Recall at ≥80% precision |
+| --- | ---: | ---: | ---: |
+| XGBoost, tuned | **0.864248** | 0.988384 | 81.82% |
+| XGBoost, default experiment | 0.853195 | 0.987224 | 78.18% |
+| Balanced logistic regression | 0.812824 | 0.980591 | 74.55% |
+| LightGBM | 0.386226 | 0.907797 | 0.00% |
+| Isolation Forest | 0.033687 | 0.946454 | 0.00% |
+
+Tuned XGBoost improved validation PR-AUC by 0.051424 and recovered 45 of 55 validation frauds at ≥80% precision. The best of 20 trials used depth 6, learning rate 0.01, minimum child weight 5, row sampling 0.8, feature sampling 0.6, and 919 boosting rounds at the best iteration. In the separate imbalance experiment with the initial XGBoost settings, PR-AUC was 0.855215 without weighting, 0.853195 with class weighting, and 0.811796 with SMOTE applied to training alone. Reusing validation for early stopping and model selection can make these scores optimistic.
+
+The last cell saves the selected estimator, its fitted preprocessor, the expected feature order, the validation metrics, and the package versions in `models/fraud_model.joblib`. It reloads the artifact and checks that it reproduces every validation score. The artifact is generated locally and excluded from Git. To score a feature frame returned by `src.data.xy` for Step 6, load the artifact from the repository root and reuse its preprocessor.
+
+```python
+import joblib
+
+artifact = joblib.load("models/fraud_model.joblib")
+X = artifact["preprocessor"].transform(X_raw)[artifact["feature_columns"]]
+model = artifact["model"]
+if artifact["name"] == "isolation_forest":
+    scores = -model.score_samples(X)
+else:
+    scores = model.predict_proba(X)[:, 1]
+```
