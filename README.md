@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, and model selection against a balanced logistic regression baseline.
+Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, and final evaluation at a threshold chosen by business cost.
 
 ## Step 0 · Set up the environment
 
@@ -89,7 +89,7 @@ Run all cells in [notebooks/03_models.ipynb](notebooks/03_models.ipynb) with the
 
 Tuned XGBoost improved validation PR-AUC by 0.051424 and recovered 45 of 55 validation frauds at ≥80% precision. The best of 20 trials used depth 6, learning rate 0.01, minimum child weight 5, row sampling 0.8, feature sampling 0.6, and 919 boosting rounds at the best iteration. In the separate imbalance experiment with the initial XGBoost settings, PR-AUC was 0.855215 without weighting, 0.853195 with class weighting, and 0.811796 with SMOTE applied to training alone. Reusing validation for early stopping and model selection can make these scores optimistic.
 
-The last cell saves the selected estimator, its fitted preprocessor, the expected feature order, the validation metrics, and the package versions in `models/fraud_model.joblib`. It reloads the artifact and checks that it reproduces every validation score. The artifact is generated locally and excluded from Git. To score a feature frame returned by `src.data.xy` for Step 6, load the artifact from the repository root and reuse its preprocessor.
+The last cell saves the selected estimator, its fitted preprocessor, the expected feature order, all candidates' validation scores, the winner's validation metrics, and the package versions in `models/fraud_model.joblib`. It reloads the artifact and checks that it reproduces every validation score. The artifact is generated locally and excluded from Git. To score a feature frame returned by `src.data.xy` for Step 6, load the artifact from the repository root and reuse its preprocessor.
 
 ```python
 import joblib
@@ -102,3 +102,28 @@ if artifact["name"] == "isolation_forest":
 else:
     scores = model.predict_proba(X)[:, 1]
 ```
+
+
+## Step 6 · Evaluate the selected model at a cost-based threshold
+
+Run [notebooks/04_evaluation_shap.ipynb](notebooks/04_evaluation_shap.ipynb) after [Step 5](#step-5--compare-and-select-fraud-models). The notebook reloads the selected model and its training-fitted preprocessor, then verifies that it reproduces the saved validation scores. If the model artifact predates the saved validation scores, rerun Step 5.
+
+The simulation charges the original transaction amount for each missed fraud and a fixed fee per false alert. It treats the amounts as USD and assumes that flagging a fraud prevents the full loss, with no added cost for true alerts. [The cost functions](src/evaluate.py) scan all distinct score cutoffs on validation, including a policy with no alerts. Equal scores stay together and equal costs favor fewer alerts. Each selected cutoff is applied to the same chronological test scores.
+
+These results are from macOS with Python 3.12.10, XGBoost 3.4.1, pandas 3.1.1, and scikit-learn 1.9.1. At the main USD 5 fee, the fixed cutoff of **0.574390531** produced 39 true alerts, 14 false alerts, and 13 missed frauds among 42,561 test transactions. Precision was **73.58%** and recall was **75.00%**. The test PR-AUC was **0.765433**, with a 95% percentile bootstrap interval of **[0.653280, 0.865480]** from 1,000 replicates. Test ROC-AUC was 0.980369.
+
+The main test scenario cost **USD 2,442.40** (USD 2,372.40 in missed fraud and USD 70.00 in false alerts), versus **USD 6,168.88** without alerts. The simulated savings were **USD 3,726.48 (60.41%)**.
+
+| Fee per false alert (USD) | Validation cutoff | Validation cost (USD) | Test cost (USD) | Test savings |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 0.574390531 | 182.30 | 2,400.40 | 61.09% |
+| 5 | 0.574390531 | 206.30 | 2,442.40 | 60.41% |
+| 10 | 0.574390531 | 246.30 | 2,512.40 | 59.27% |
+
+The three fees selected the same cutoff, so the alert decisions stayed fixed as the fee changed. The missed frauds accounted for 38.5% of the fraudulent amount in test. Their median amount was USD 12.31 versus USD 4.69 for detected frauds. Four of the 13 misses occurred at relative hour 19. V14 had the largest median gap between missed and detected cases among the three leading features by validation permutation importance.
+
+[Validation precision–recall curves](reports/figures/05_pr_curves.png) · [Validation cost by cutoff](reports/figures/06_cost_vs_threshold.png) · [Test confusion matrix](reports/figures/07_confusion_test.png)
+
+The dataset spans about two days, test contains 52 frauds, and the PCA components are anonymized. The simulated cost depends on the fee and the assumed fraud loss. The bootstrap resamples individual transactions from test using fixed model scores. Model selection and threshold selection used validation. Step 4 reported baseline metrics on the same test split.
+
+Run `python -m pytest -q` to check the cost calculation, tied scores and the policies of alerting on every transaction or on none.
