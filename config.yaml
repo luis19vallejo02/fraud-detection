@@ -1,0 +1,21 @@
+data_path: data/raw/creditcard.csv
+seed: 42
+split:
+  train: 0.70
+  val: 0.15
+cost:
+  fp_cost: 5.0
+xgboost:
+  n_estimators: 2000
+  learning_rate: 0.01
+  max_depth: 6
+  subsample: 0.8
+  colsample_bytree: 0.6
+  min_child_weight: 5
+  early_stopping_rounds: 100
+  eval_metric: aucpr
+  tree_method: hist
+  n_jobs: 4
+outputs:
+  model_path: models/xgb_model.joblib
+  metrics_path: reports/metrics.json

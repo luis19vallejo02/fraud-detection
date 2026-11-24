@@ -1,6 +1,6 @@
 # Credit card fraud detection
 
-Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, evaluation at a threshold chosen by business cost, and SHAP explanations.
+Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, evaluation at a threshold chosen by business cost, SHAP explanations, and reproducible training from the command line.
 
 ## Step 0 · Set up the environment
 
@@ -146,3 +146,20 @@ The notebook explains the largest fraud by original amount in each test outcome 
 [SHAP summary plot](reports/figures/08_shap_summary.png) · [Mean absolute SHAP contributions](reports/figures/09_shap_bar.png)
 
 `V1` through `V28` are anonymized PCA components with unknown business meanings. SHAP identifies which components drive each model score and in which direction. Business variables such as merchant country, card type, or recent transaction frequency would give analysts more context for interpreting the contributions.
+
+## Step 8 · Reproduce training and run the tests
+
+[![tests](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml)
+
+With the Python 3.12 environment from Step 0 and `data/raw/creditcard.csv` from Step 1, run the following from the repository root:
+
+```bash
+python -m src.train
+pytest -q
+```
+
+[`config.yaml`](config.yaml) records the Step 5 winning hyperparameters, random seed, split proportions, false-alert cost, and output paths. The script fits preprocessing and class weighting on training data, uses validation for early stopping and threshold selection, then evaluates the fixed model and cutoff on the chronological test set. Pass `--config path/to/config.yaml` to use a different configuration. Relative data and output paths resolve from the configuration file's directory.
+
+The command writes `models/xgb_model.joblib` with the fitted estimator, preprocessor, expected feature order, and threshold. It also writes [`reports/metrics.json`](reports/metrics.json) with the validation and test results. A `null` threshold in JSON denotes the no-alert policy, stored as positive infinity in the model bundle. The model bundle stays local, and the notebooks can still use their earlier `models/fraud_model.joblib` artifact.
+
+Two runs on the original CSV in the documented macOS environment produced identical metrics. The run selected 919 boosting rounds and reproduced the Step 6 cutoff of 0.574390531, test average precision of 0.765433, and simulated test cost of USD 2,442.40. The automated tests use synthetic data to check time boundaries, training-only preprocessing, recall, cost, and two executions of the training command. GitHub Actions runs the same suite on Python 3.12 without downloading the dataset.
