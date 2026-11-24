@@ -224,6 +224,7 @@ __marimo__/
 
 # Project data and local artifacts
 .DS_Store
+kaggle.json
 data/raw/
 data/processed/
 .venv/

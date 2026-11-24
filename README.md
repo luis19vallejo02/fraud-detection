@@ -1,6 +1,52 @@
-# Credit card fraud detection
+# Credit Card Fraud Detection
 
-Explore fraud in a highly imbalanced set of card transactions. The workflow covers data validation, exploratory data analysis (EDA), chronological preprocessing, model selection against a balanced logistic regression baseline, evaluation at a threshold chosen by business cost, SHAP explanations, and reproducible training from the command line.
+[![Python tests](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml)
+[![Docker smoke test](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/docker.yml/badge.svg)](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/docker.yml)
+
+An end-to-end machine learning project using 284,807 public card transactions, 0.17% of them fraudulent. It compares four model families with a chronological split, selects an alert threshold by review cost, explains predictions with SHAP, and serves scores through FastAPI and Docker.
+
+## Key results on the chronological test set
+
+| Metric | Tuned XGBoost |
+| --- | ---: |
+| PR-AUC (average precision) | **0.7654** (95% bootstrap CI **[0.6533, 0.8655]**) |
+| Recall at ≥80% precision across test cutoffs | **75.00%** |
+| Precision and recall at the fixed cost-based cutoff | **73.58% precision**, **75.00% recall** |
+| Simulated cost savings versus no alerts | **60.41%** (USD 2,442.40 versus USD 6,168.88) |
+
+The held-out set contains 42,561 transactions and 52 frauds. The fixed cutoff was chosen on validation. Recall at ≥80% precision summarizes the test precision–recall curve across cutoffs. [Metrics JSON](reports/metrics.json) · [Evaluation notebook](notebooks/04_evaluation_shap.ipynb) · [Data Studio dashboard](https://datastudio.google.com/reporting/e26dfb4e-32dd-4725-8df1-1e14a1c0de4d/page/DQIEG)
+
+| Validation precision–recall | Validation cost by cutoff | SHAP contributions |
+| --- | --- | --- |
+| [![Precision–recall curves by model](reports/figures/05_pr_curves.png)](reports/figures/05_pr_curves.png) | [![Cost at each validation cutoff](reports/figures/06_cost_vs_threshold.png)](reports/figures/06_cost_vs_threshold.png) | [![SHAP summary for the selected XGBoost model](reports/figures/08_shap_summary.png)](reports/figures/08_shap_summary.png) |
+
+## How to reproduce
+
+Download [the public dataset](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) and extract `creditcard.csv` into the cloned repository's `data/raw/` directory before training.
+
+```bash
+git clone https://github.com/luis19vallejo02/fraud-detection.git
+cd fraud-detection
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+mkdir -p data/raw
+# Place creditcard.csv in data/raw/ before continuing.
+python -m src.train
+python -m pytest -q
+python -m src.export_predictions
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+An authenticated Kaggle CLI can also fetch the CSV with `kaggle datasets download -d mlg-ulb/creditcardfraud -p data/raw --unzip`. Open [the local API docs](http://127.0.0.1:8000/docs) after starting the server. [Step 9](#step-9--serve-predictions-and-report-on-alerts) includes the Docker commands.
+
+## Method and limitations
+
+- An always-legitimate classifier achieves 99.83% accuracy on the original data and catches zero frauds. The model comparison uses average precision, with ROC-AUC and recall at fixed precision as secondary metrics.
+- Exact duplicates are removed before the approximately 70/15/15 chronological split. The amount scaler learns from training data. Model and cutoff selection use validation.
+- The cost simulation assumes USD 5 per false alert and a loss equal to the original amount of each missed fraud. Savings depend on these assumptions and on the roughly two-day sample.
+- SHAP ranks `V4`, `V14`, and `V12` highest on the explanation sample. These anonymized PCA components have unknown business meanings. The test set contains 52 frauds, so the bootstrap interval matters when interpreting performance.
+- Future work could test calibrated scores, drift monitoring on a longer dataset, and cost-sensitive training with observed review costs.
 
 ## Step 0 · Set up the environment
 
@@ -148,8 +194,6 @@ The notebook explains the largest fraud by original amount in each test outcome 
 `V1` through `V28` are anonymized PCA components with unknown business meanings. SHAP identifies which components drive each model score and in which direction. Business variables such as merchant country, card type, or recent transaction frequency would give analysts more context for interpreting the contributions.
 
 ## Step 8 · Reproduce training and run the tests
-
-[![tests](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/luis19vallejo02/fraud-detection/actions/workflows/tests.yml)
 
 With the Python 3.12 environment from Step 0 and `data/raw/creditcard.csv` from Step 1, run the following from the repository root:
 
