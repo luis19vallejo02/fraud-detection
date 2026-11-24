@@ -192,8 +192,10 @@ Use the saved model to regenerate the chronological test predictions and dashboa
 python -m src.export_predictions
 ```
 
-`reports/test_predictions.csv` contains the row-level predictions and is kept local. [`reports/dashboard_hourly.csv`](reports/dashboard_hourly.csv) contains the aggregates from the public dataset used in the [Data Studio dashboard](https://datastudio.google.com/reporting/e26dfb4e-32dd-4725-8df1-1e14a1c0de4d/page/DQIEG). Hours count from the first transaction. The report shows alerts by relative hour, detected and missed fraud amounts, and alert precision, calculated as `SUM(true_alerts) / SUM(alerts)` over the displayed rows.
+`reports/test_predictions.csv` contains row-level predictions and stays local. [`reports/dashboard_hourly.csv`](reports/dashboard_hourly.csv) contains the aggregates from the public dataset used in the [Data Studio dashboard](https://datastudio.google.com/reporting/e26dfb4e-32dd-4725-8df1-1e14a1c0de4d/page/DQIEG). After regenerating the export, replace the values in the connected Google Sheet with this aggregate CSV, keeping the header row and field names. Refresh the report data to load the new totals.
 
-| Test transactions | Alerts | True alerts | Alert precision | Detected fraud amount | Missed fraud amount |
+Use the **Hora relativa** selector to filter both charts and all six indicators. Hours count from the first transaction in the dataset. The report compares total and true alerts by hour and shows how the confirmed fraud amount splits between flagged and missed transactions. Alert precision uses `SUM(true_alerts) / SUM(alerts)`. Fraud amount coverage uses `SUM(detected_fraud_amount) / NULLIF(SUM(detected_fraud_amount) + SUM(missed_fraud_amount), 0)`. Both ratios are computed after filtering. The detected amount is the sum of amounts on flagged, confirmed frauds in the evaluation dataset. It represents simulated detection.
+
+| Test transactions | Alerts | True alerts | Alert precision | Detected fraud amount | Missed fraud amount | Fraud amount coverage |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42,561 | 53 | 39 | 73.58% | USD 3,796.48 | USD 2,372.40 |
+| 42,561 | 53 | 39 | 73.58% | USD 3,796.48 | USD 2,372.40 | 61.54% |

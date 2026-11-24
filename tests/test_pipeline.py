@@ -43,9 +43,14 @@ def test_recall_at_fixed_precision():
 
 
 def test_training_command_reproduces_cost_metrics_and_saves_a_usable_model(tmp_path):
-    time = np.arange(300)
-    fraud = time % 11 == 0
-    data = pd.DataFrame({"Time": time, "V1": fraud.astype(float), "Amount": time + 20, "Class": fraud.astype(int)})
+    transaction = np.arange(300)
+    fraud = transaction % 11 == 0
+    data = pd.DataFrame({
+        "Time": transaction * 120,
+        "V1": fraud.astype(float),
+        "Amount": transaction + 20,
+        "Class": fraud.astype(int),
+    })
     data_path = tmp_path / "toy.csv"
     data.to_csv(data_path, index=False)
 
@@ -81,3 +86,27 @@ def test_training_command_reproduces_cost_metrics_and_saves_a_usable_model(tmp_p
     assert metrics["test_cost_no_model"] == test.loc[test_labels.eq(1), "Amount"].sum()
     assert metrics["n_test"] == len(test)
     assert metrics["n_test_frauds"] == test_labels.sum()
+
+    export_command = [sys.executable, "-m", "src.export_predictions", "--config", str(config_path)]
+    subprocess.run(export_command, cwd=root, check=True, capture_output=True, text=True)
+    predictions = pd.read_csv(metrics_path.parent / "test_predictions.csv")
+    transaction_columns = ["Time", "Amount", "Class"]
+    pd.testing.assert_frame_equal(
+        predictions[transaction_columns], test[transaction_columns].reset_index(drop=True)
+    )
+    np.testing.assert_allclose(predictions["fraud_score"], test_scores)
+    np.testing.assert_array_equal(predictions["alert"], test_scores >= threshold)
+
+    hourly = pd.read_csv(metrics_path.parent / "dashboard_hourly.csv", index_col="relative_hour")
+    hours = predictions["Time"] // 3600
+    assert hourly.index.tolist() == sorted(hours.unique().tolist())
+    for hour, group in predictions.groupby(hours):
+        alerted = group["alert"].eq(1)
+        confirmed_fraud = group["Class"].eq(1)
+        assert hourly.loc[hour].to_dict() == {
+            "transactions": len(group),
+            "alerts": int(alerted.sum()),
+            "true_alerts": int((confirmed_fraud & alerted).sum()),
+            "detected_fraud_amount": float(group.loc[confirmed_fraud & alerted, "Amount"].sum()),
+            "missed_fraud_amount": float(group.loc[confirmed_fraud & ~alerted, "Amount"].sum()),
+        }
