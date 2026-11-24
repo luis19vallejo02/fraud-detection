@@ -1,0 +1,14 @@
+{
+  "threshold": 0.5743905305862427,
+  "fp_cost": 5.0,
+  "best_iteration": 919,
+  "val_pr_auc": 0.8642480969588282,
+  "val_cost": 206.29999999999998,
+  "test_pr_auc": 0.7654334084814737,
+  "test_roc_auc": 0.9803688630642923,
+  "test_recall_at_p80": 0.75,
+  "test_cost": 2442.4,
+  "test_cost_no_model": 6168.880000000001,
+  "n_test": 42561,
+  "n_test_frauds": 52
+}
