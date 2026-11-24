@@ -44,7 +44,10 @@ jobs:
         run: |
           docker run --detach --name fraud-api -p 127.0.0.1:8000:8000 fraud-api
           trap 'docker logs fraud-api; docker rm -f fraud-api' EXIT
-          curl --fail --silent --show-error --retry 20 --retry-connrefused http://127.0.0.1:8000/health > /tmp/health.json
+          # Docker can accept connections before the model has loaded in Uvicorn.
+          curl --fail --silent --show-error --retry 20 --retry-all-errors \
+            --retry-delay 1 --retry-max-time 30 --max-time 3 \
+            --output /tmp/health.json http://127.0.0.1:8000/health
           curl --fail --silent --show-error http://127.0.0.1:8000/docs > /dev/null
           curl --fail --silent --show-error -H 'Content-Type: application/json' \
             -d @sample_request.json http://127.0.0.1:8000/predict > /tmp/prediction.json
