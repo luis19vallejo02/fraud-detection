@@ -163,3 +163,37 @@ pytest -q
 The command writes `models/xgb_model.joblib` with the fitted estimator, preprocessor, expected feature order, and threshold. It also writes [`reports/metrics.json`](reports/metrics.json) with the validation and test results. A `null` threshold in JSON denotes the no-alert policy, stored as positive infinity in the model bundle. The model bundle stays local, and the notebooks can still use their earlier `models/fraud_model.joblib` artifact.
 
 Two runs on the original CSV in the documented macOS environment produced identical metrics. The run selected 919 boosting rounds and reproduced the Step 6 cutoff of 0.574390531, test average precision of 0.765433, and simulated test cost of USD 2,442.40. The automated tests use synthetic data to check time boundaries, training-only preprocessing, recall, cost, and two executions of the training command. GitHub Actions runs the same suite on Python 3.12 without downloading the dataset.
+
+## Step 9 · Serve predictions and report on alerts
+
+After Step 8 creates `models/xgb_model.joblib`, launch the API from the repository root:
+
+```bash
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8000/predict \
+  -H 'Content-Type: application/json' --data-binary @sample_request.json
+```
+
+Open [Swagger UI](http://127.0.0.1:8000/docs) to send requests interactively. `POST /predict` accepts 28 finite PCA components in `V1`–`V28` order and a finite, nonnegative `amount` in the original units. It applies the training-fitted preprocessor and returns the uncalibrated XGBoost `fraud_score`, the `is_fraud_alert` decision, and the validation-selected `threshold`. A score at the threshold triggers an alert. A `null` threshold denotes a no-alert policy. [`sample_request.json`](sample_request.json) is a held-out row from the public dataset that triggers an alert with the documented model. Set `FRAUD_MODEL_PATH` to serve another trusted bundle produced by the same training pipeline.
+
+Build and run the container after training, from the same directory:
+
+```bash
+docker build -t fraud-api .
+docker run --rm -p 127.0.0.1:8000:8000 fraud-api
+```
+
+The build context includes the API, its dependencies and the local trained bundle. The [Docker workflow](.github/workflows/docker.yml) trains on synthetic transactions and checks `/health`, `/docs`, and `/predict` in a running container.
+
+Use the saved model to regenerate the chronological test predictions and dashboard data:
+
+```bash
+python -m src.export_predictions
+```
+
+`reports/test_predictions.csv` contains the row-level predictions and is kept local. [`reports/dashboard_hourly.csv`](reports/dashboard_hourly.csv) contains the aggregates from the public dataset used in the [Data Studio dashboard](https://datastudio.google.com/reporting/e26dfb4e-32dd-4725-8df1-1e14a1c0de4d/page/DQIEG). Hours count from the first transaction. The report shows alerts by relative hour, detected and missed fraud amounts, and alert precision, calculated as `SUM(true_alerts) / SUM(alerts)` over the displayed rows.
+
+| Test transactions | Alerts | True alerts | Alert precision | Detected fraud amount | Missed fraud amount |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42,561 | 53 | 39 | 73.58% | USD 3,796.48 | USD 2,372.40 |

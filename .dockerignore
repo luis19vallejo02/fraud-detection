@@ -1,0 +1,9 @@
+**
+!requirements-api.txt
+!api/
+!api/main.py
+!src/
+!src/__init__.py
+!src/features.py
+!models/
+!models/xgb_model.joblib
